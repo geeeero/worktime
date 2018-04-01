@@ -1,0 +1,22 @@
+---
+title: "Worktime -- Daily"
+output: html_notebook
+---
+
+
+```{r setup, echo=FALSE, results="hide"}
+# packages
+library(magrittr)
+library(tidyr)
+library(lubridate)
+# import the trackworktime backup file
+wtdio <- read.csv("backup.csv", header = TRUE, sep = ";", skip = 1)
+wtdio <- as_tibble(wtdio[,c(1, 2, 6)])
+names(wtdio) <- c("io", "datetime", "type")
+wtdio$datetime <- ymd_hms(wtdio$datetime)
+wtdio %<>% arrange(datetime)
+tail(wtdio)
+# create work slices file
+#wtd <- wtdio %>%
+```
+
