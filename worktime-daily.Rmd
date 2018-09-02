@@ -1,21 +1,24 @@
 ---
-title: "Worktime -- Daily"
-output: html_notebook
+title: "Worktime"
+output: html_document
 ---
 
+Stand: `r Sys.time()`
 
-```{r packages, echo=FALSE, results="hide"}
+```{r packages, echo=FALSE, message=FALSE, results="hide"}
 # packages
 library(magrittr)
 library(tidyr)
 library(dplyr)
 library(lubridate)
+library(ggplot2)
 ```
 
-```{r importbackupfile}
+```{r importbackupfile, echo = FALSE}
 # import the trackworktime backup file
 # wtdio = worktime daily in/out
-wtdio <- read.csv("backup.csv", header = FALSE, sep = ";", skip = 1,
+# trackworktime sometimes adds a default row: set skip = 2 (else skip = 1) 
+wtdio <- read.csv("backup.csv", header = FALSE, sep = ";", skip = 2,
                   stringsAsFactors = FALSE)
 wtdio <- as_tibble(wtdio[,c(1, 2, 6)])
 names(wtdio) <- c("io", "datetime", "type")
@@ -30,19 +33,70 @@ stopifnot(
   all.equal(inindex, which(wtdio$io == "in")),
   all.equal(outindex, which(wtdio$io == "out")))
 # types
-table(wtdio$type)
-filter(wtdio, type == "Default")
+#table(wtdio$type)
+#filter(wtdio, type == "Default")
+types <- unique(wtdio$type)
+types <- types[!(types %in% c("", "Default"))]
+intypes <- wtdio$type[inindex]
+# check that no "in" has types "" or "Default"
 stopifnot(
-  all(sapply(wtdio$type[inindex], function(x) x %in% c("home", "office", "travel"))))
+  all(sapply(intypes, function(x) x %in% types)))
+# label "out"s with types
+wtdio$type[outindex] <- intypes
 ```
-
-```{r workslices}
+```{r workslices, echo = FALSE}
 # create work slices tibble
 # period has nice display 
 # duration calculates in seconds, sum() works
-asdf <- as.duration(interval(wtdio$datetime[inindex],
-                             wtdio$datetime[outindex]))
-seconds_to_period(sum(asdf)) # wochenweise?
-#wtd <- wtdio %>%
+wslc <- tibble(start = wtdio$datetime[inindex],
+               type = wtdio$type[inindex],
+               duration =  as.duration(interval(wtdio$datetime[inindex],
+                                                wtdio$datetime[outindex])),
+               minutes = as.numeric(duration, "minutes"),
+               week = isoweek(start),
+               day = floor_date(start, unit = "days"))
+#seconds_to_period(wslc$duration[1:10]) # wochenweise?
+#wslc$duration[1:10]
+workdays <- wslc$start %>% 
+  floor_date(unit = "days") %>% 
+  unique() %>% 
+  length()
+```
+
+# Nach Typen
+```{r types, echo = FALSE}
+#minutes_by_type <- xtabs(minutes ~ type, data = wslc)
+minutes_by_type <- wslc %>% 
+  select(type, minutes) %>% 
+  group_by(type) %>% 
+  summarise(minutes = sum(minutes)) %>% 
+  mutate(mpd = minutes/workdays,
+         pct = paste0(round(minutes/sum(minutes)*100, 1), "%")) %>% 
+  arrange(type)
+ggplot(minutes_by_type,
+       aes(x = forcats::fct_reorder(type, minutes, .desc = TRUE),
+           y = mpd, label = pct)) + geom_col() +
+  geom_text(nudge_y = 10) +
+  geom_text(aes(label = round(mpd, 0)), nudge_y = -10, col = "white") +
+  labs(x = "", y = "Minuten pro Arbeitstag")
+```
+
+# Wochenansicht
+```{r typesperweek, echo = FALSE}
+wdays_per_week <- wslc %>% 
+  select(week, day) %>% 
+  group_by(week) %>% 
+  summarise(wdays = min(5, length(unique(day))))
+types_per_week <- wslc %>% 
+  select(type, minutes, week, day) %>% 
+  group_by(type, week) %>% 
+  summarise(minutes = sum(minutes)) %>% 
+  arrange(week) %>% 
+  left_join(wdays_per_week, by = "week")
+ggplot(types_per_week, aes(x = week, y = minutes/wdays,
+                           fill = forcats::fct_reorder(type, minutes,
+                                                       .desc = TRUE))) +
+  geom_col() +
+  labs(x = "Woche", y = "Minuten pro Tag", fill = "Typ")
 ```
 
