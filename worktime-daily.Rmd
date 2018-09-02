@@ -8,24 +8,31 @@ output: html_notebook
 # packages
 library(magrittr)
 library(tidyr)
+library(dplyr)
 library(lubridate)
 ```
 
 ```{r importbackupfile}
 # import the trackworktime backup file
 # wtdio = worktime daily in/out
-wtdio <- read.csv("backup.csv", header = TRUE, sep = ";", skip = 1)
+wtdio <- read.csv("backup.csv", header = FALSE, sep = ";", skip = 1,
+                  stringsAsFactors = FALSE)
 wtdio <- as_tibble(wtdio[,c(1, 2, 6)])
 names(wtdio) <- c("io", "datetime", "type")
-wtdio$datetime %<>% ymd_hms() %>% force_tz("Europe/Amsterdam")
+wtdio$datetime %<>% ymd_hms() %>% 
+  force_tz("Europe/Berlin") %>% 
+  round_date(unit = "minute")
 wtdio %<>% arrange(datetime)
-wtdio$datetime %<>% round_date(unit = "minute")
 # check in/out pattern
 inindex <- seq(1, dim(wtdio)[1], by = 2)
 outindex <- inindex + 1
 stopifnot(
   all.equal(inindex, which(wtdio$io == "in")),
-  all.equal(outindex, which(wtdio$io == "out")),
+  all.equal(outindex, which(wtdio$io == "out")))
+# types
+table(wtdio$type)
+filter(wtdio, type == "Default")
+stopifnot(
   all(sapply(wtdio$type[inindex], function(x) x %in% c("home", "office", "travel"))))
 ```
 
